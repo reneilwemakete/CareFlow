@@ -1,0 +1,43 @@
+name: Generate check-in schema migration
+
+on:
+  push:
+    branches:
+      - feature/clinic-schedule-checkin
+    paths:
+      - '.github/workflows/generate-checkin-migration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install EF tool
+        run: dotnet tool install --global dotnet-ef --version 10.0.14
+      - name: Restore and compile
+        run: |
+          dotnet restore CareFlow.slnx
+          dotnet build CareFlow.slnx --no-restore
+      - name: Generate migration
+        env:
+          ConnectionStrings__CareFlowDb: 'Server=127.0.0.1,1433;Database=CareFlowDb;User Id=sa;Password=DesignTimeOnly_123!;Encrypt=True;TrustServerCertificate=True'
+        run: |
+          dotnet ef migrations add PersistAppointmentCheckIn --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext --output-dir Persistence/Migrations
+          dotnet ef migrations has-pending-model-changes --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext
+          dotnet ef migrations script --idempotent --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext -o /tmp/schema.sql
+          test -s /tmp/schema.sql
+      - name: Commit new migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/CareFlow.Infrastructure/Persistence/Migrations
+          git diff --cached --quiet && exit 0
+          git commit -m "Add EF migration for persisted check-in timestamp [skip ci]"
+          git push origin HEAD:feature/clinic-schedule-checkin
