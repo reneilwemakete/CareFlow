@@ -15,10 +15,10 @@ public static class AppointmentLifecycleEndpoints
 {
     public sealed record RescheduleRequest(DateTime StartUtc, DateTime EndUtc, Guid PractitionerId, string RowVersion);
     public sealed record LifecycleResponse(Guid Id, Guid PractitionerId, DateTime StartUtc,
-        DateTime EndUtc, AppointmentStatus Status, bool CheckedIn, string RowVersion);
+        DateTime EndUtc, AppointmentStatus Status, bool CheckedIn, DateTime? CheckedInAtUtc, string RowVersion);
 
-    private static LifecycleResponse Response(Appointment a, bool checkedIn) =>
-        new(a.Id, a.PractitionerId, a.StartUtc, a.EndUtc, a.Status, checkedIn,
+    private static LifecycleResponse Response(Appointment a) =>
+        new(a.Id, a.PractitionerId, a.StartUtc, a.EndUtc, a.Status, a.CheckedInAtUtc.HasValue, a.CheckedInAtUtc,
             Convert.ToBase64String(a.RowVersion));
 
     private static async Task<ApplicationUser?> StaffAsync(ClaimsPrincipal principal,
@@ -84,9 +84,7 @@ public static class AppointmentLifecycleEndpoints
                 if (appointment.Status != AppointmentStatus.Scheduled ||
                     appointment.EndUtc <= DateTime.UtcNow)
                     return Results.Conflict(new { message = "Only upcoming scheduled appointments may be rescheduled." });
-                if (await db.AuditEvents.AnyAsync(e => e.ClinicId == staff.ClinicId &&
-                    e.EntityType == "Appointment" && e.EntityId == id.ToString() &&
-                    e.Action == "AppointmentCheckedIn", ct))
+                if (appointment.CheckedInAtUtc.HasValue)
                     return Results.Conflict(new { message = "A checked-in appointment cannot be rescheduled." });
                 if (!await db.Practitioners.AnyAsync(p => p.ClinicId == staff.ClinicId &&
                     p.Id == request.PractitionerId && p.IsActive, ct))
@@ -114,7 +112,7 @@ public static class AppointmentLifecycleEndpoints
                 Audit(db, staff, appointment, "AppointmentRescheduled");
                 await db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
-                return Results.Ok(Response(appointment, false));
+                return Results.Ok(Response(appointment));
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -142,16 +140,15 @@ public static class AppointmentLifecycleEndpoints
                 if (appointment.Status != AppointmentStatus.Scheduled ||
                     now < appointment.StartUtc.AddMinutes(-30) || now >= appointment.EndUtc)
                     return Results.Conflict(new { message = "Check-in is only allowed from 30 minutes before the appointment until its end." });
-                if (await db.AuditEvents.AnyAsync(e => e.ClinicId == staff.ClinicId &&
-                    e.EntityType == "Appointment" && e.EntityId == id.ToString() &&
-                    e.Action == "AppointmentCheckedIn", ct))
+                if (appointment.CheckedInAtUtc.HasValue)
                     return Results.Conflict(new { message = "This appointment is already checked in." });
 
-                // Until a dedicated check-in table is introduced, the durable audit entry tracks check-in.
+                appointment.CheckedInAtUtc = now;
+                appointment.UpdatedAtUtc = now;
                 Audit(db, staff, appointment, "AppointmentCheckedIn");
                 await db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
-                return Results.Ok(Response(appointment, true));
+                return Results.Ok(Response(appointment));
             }
             catch (Exception ex) when (SqlContention(ex))
             {
@@ -174,10 +171,7 @@ public static class AppointmentLifecycleEndpoints
                 if (appointment.Status != AppointmentStatus.Scheduled ||
                     DateTime.UtcNow < appointment.StartUtc)
                     return Results.Conflict(new { message = "Only started scheduled appointments can be completed." });
-                var checkedIn = await db.AuditEvents.AnyAsync(e =>
-                    e.ClinicId == staff.ClinicId && e.EntityType == "Appointment" &&
-                    e.EntityId == id.ToString() && e.Action == "AppointmentCheckedIn", ct);
-                if (!checkedIn)
+                if (!appointment.CheckedInAtUtc.HasValue)
                     return Results.Conflict(new { message = "Check in the appointment before completion." });
 
                 appointment.Status = AppointmentStatus.Completed;
@@ -185,7 +179,7 @@ public static class AppointmentLifecycleEndpoints
                 Audit(db, staff, appointment, "AppointmentCompleted");
                 await db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
-                return Results.Ok(Response(appointment, true));
+                return Results.Ok(Response(appointment));
             }
             catch (DbUpdateConcurrencyException)
             {

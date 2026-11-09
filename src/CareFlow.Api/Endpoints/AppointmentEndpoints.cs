@@ -16,11 +16,11 @@ public static class AppointmentEndpoints
     public sealed record AvailabilityRequest(Guid PractitionerId, DateTime StartUtc, DateTime EndUtc, bool IsAvailable);
     public sealed record BookAppointmentRequest(Guid PatientId, Guid PractitionerId, DateTime StartUtc, DateTime EndUtc, string? ReasonForVisit);
     public sealed record AppointmentView(Guid Id, Guid PatientId, Guid PractitionerId, DateTime StartUtc,
-        DateTime EndUtc, AppointmentStatus Status, string? ReasonForVisit, string RowVersion);
+        DateTime EndUtc, AppointmentStatus Status, string? ReasonForVisit, DateTime? CheckedInAtUtc, string RowVersion);
 
     private static AppointmentView View(Appointment a) =>
         new(a.Id, a.PatientId, a.PractitionerId, a.StartUtc, a.EndUtc, a.Status,
-            a.ReasonForVisit, Convert.ToBase64String(a.RowVersion));
+            a.ReasonForVisit, a.CheckedInAtUtc, Convert.ToBase64String(a.RowVersion));
 
     private static async Task<ApplicationUser?> StaffAsync(ClaimsPrincipal principal,
         UserManager<ApplicationUser> users, CareFlowDbContext db, CancellationToken ct)
@@ -180,9 +180,7 @@ public static class AppointmentEndpoints
             if (a is null) return Results.NotFound();
             if (a.Status != AppointmentStatus.Scheduled)
                 return Results.Conflict(new { message = "Only scheduled appointments can be cancelled." });
-            if (await db.AuditEvents.AnyAsync(e => e.ClinicId == staff.ClinicId &&
-                e.EntityType == "Appointment" && e.EntityId == id.ToString() &&
-                e.Action == "AppointmentCheckedIn", ct))
+            if (a.CheckedInAtUtc.HasValue)
                 return Results.Conflict(new { message = "Checked-in appointments cannot be cancelled." });
 
             a.Status = AppointmentStatus.Cancelled;
