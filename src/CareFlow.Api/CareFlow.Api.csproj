@@ -3,5 +3,9 @@
     <ProjectReference Include="../CareFlow.Application/CareFlow.Application.csproj" />
     <ProjectReference Include="../CareFlow.Infrastructure/CareFlow.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 </Project>
