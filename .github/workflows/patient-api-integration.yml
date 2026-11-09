@@ -1,9 +1,10 @@
-name: Patient API SQL Server integration tests
+name: CareFlow SQL Server API integration tests
 
 on:
   push:
     branches:
       - feature/patient-management
+      - feature/appointment-scheduling
   pull_request:
   workflow_dispatch:
 
