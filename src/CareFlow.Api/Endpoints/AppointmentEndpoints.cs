@@ -180,6 +180,10 @@ public static class AppointmentEndpoints
             if (a is null) return Results.NotFound();
             if (a.Status != AppointmentStatus.Scheduled)
                 return Results.Conflict(new { message = "Only scheduled appointments can be cancelled." });
+            if (await db.AuditEvents.AnyAsync(e => e.ClinicId == staff.ClinicId &&
+                e.EntityType == "Appointment" && e.EntityId == id.ToString() &&
+                e.Action == "AppointmentCheckedIn", ct))
+                return Results.Conflict(new { message = "Checked-in appointments cannot be cancelled." });
 
             a.Status = AppointmentStatus.Cancelled;
             a.UpdatedAtUtc = DateTime.UtcNow;
