@@ -56,6 +56,7 @@ app.MapStaffAuthentication();
 app.MapPatientEndpoints();
 app.MapAppointmentEndpoints();
 app.MapPractitionerEndpoints();
+app.MapAppointmentLifecycle();
 
 app.Run();
 
