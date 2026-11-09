@@ -220,4 +220,38 @@ public sealed class PatientApiTests : IAsyncLifetime
         using var body = JsonDocument.Parse(await search.Content.ReadAsStringAsync());
         Assert.Equal(0, body.RootElement.GetProperty("total").GetInt32());
     }
+    [Fact]
+    public async Task UnconfirmedStaffCannotLogIn()
+    {
+        var email = $"unconfirmed-{Guid.NewGuid():N}@example.test";
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = new ApplicationUser
+            {
+                ClinicId = _firstClinic, UserName = email, Email = email,
+                EmailConfirmed = false, LockoutEnabled = true
+            };
+            Assert.True((await users.CreateAsync(user, Password)).Succeeded);
+            Assert.True((await users.AddToRoleAsync(user, "Administrator")).Succeeded);
+        }
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            email, password = Password
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SensitiveApiResponsesDisallowCaching()
+    {
+        await AuthenticateAsync();
+        var response = await _client.GetAsync("/api/v1/patients");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("no-store", response.Headers.CacheControl?.ToString() ?? "",
+            StringComparison.OrdinalIgnoreCase);
+        Assert.True(response.Headers.TryGetValues("X-Content-Type-Options", out var values));
+        Assert.Contains("nosniff", values!);
+    }
+
 }
