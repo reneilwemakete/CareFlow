@@ -1,10 +1,12 @@
 name: Generate and validate SQL Server migration
-on:
-  push:
-    branches: [database-foundation]
-    paths:
-      - 'src/CareFlow.Api/CareFlow.Api.csproj'
-  workflow_dispatch:
+on:  
+ push:
+  branches: [database-foundation]
+  paths:
+    - '.github/workflows/database-migration.yml'
+    - 'src/CareFlow.Api/CareFlow.Api.csproj'
+
+ workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -21,25 +23,30 @@ jobs:
         run: |
           dotnet restore CareFlow.slnx
           dotnet build CareFlow.slnx --no-restore
-      - name: Generate initial migration from EF model
-        env:
-          ConnectionStrings__CareFlowDb: 'Server=127.0.0.1,1433;Database=CareFlowDb;User Id=sa;Password=DesignTimeOnly_123!;Encrypt=True;TrustServerCertificate=True'
-        run: |
-          dotnet ef migrations add InitialCreate \
-            --project src/CareFlow.Infrastructure \
-            --startup-project src/CareFlow.Api \
-            --context CareFlowDbContext \
-            --output-dir Persistence/Migrations \
-          dotnet ef migrations script --idempotent \
-            --project src/CareFlow.Infrastructure \
-            --startup-project src/CareFlow.Api \
-            --context CareFlowDbContext \
-             -o /tmp/careflow-migration.sql
-          test -s /tmp/careflow-migration.sql
-          dotnet ef migrations has-pending-model-changes \
-            --project src/CareFlow.Infrastructure \
-            --startup-project src/CareFlow.Api \
-            --context CareFlowDbContext --no-build
+      
+ - name: Generate initial migration from EF model
+   env:
+    ConnectionStrings__CareFlowDb: 'Server=127.0.0.1,1433;Database=CareFlowDb;User Id=sa;Password=DesignTimeOnly_123!;Encrypt=True;TrustServerCertificate=True'
+  run: |
+    dotnet ef migrations add InitialCreate \
+      --project src/CareFlow.Infrastructure \
+      --startup-project src/CareFlow.Api \
+      --context CareFlowDbContext \
+      --output-dir Persistence/Migrations
+
+    dotnet ef migrations script --idempotent \
+      --project src/CareFlow.Infrastructure \
+      --startup-project src/CareFlow.Api \
+      --context CareFlowDbContext \
+      -o /tmp/careflow-migration.sql
+
+    test -s /tmp/careflow-migration.sql
+
+    dotnet ef migrations has-pending-model-changes \
+      --project src/CareFlow.Infrastructure \
+      --startup-project src/CareFlow.Api \
+      --context CareFlowDbContext
+
       - name: Generate temporary CI SQL password
         shell: bash
         run: |
