@@ -2,7 +2,7 @@
 
 A backend-first healthcare appointment management **portfolio project** built with C#, ASP.NET Core, EF Core and Microsoft SQL Server.
 
-**Status: Database foundation verified; patient API in development.** This is not a deployed healthcare system. Use fictional patient and clinic data only.
+**Status: Database foundation and Patient Management API merged; appointment scheduling in review.** This is not a deployed healthcare system. Use fictional patient and clinic data only.
 
 ## Included
 
@@ -14,7 +14,7 @@ A backend-first healthcare appointment management **portfolio project** built wi
 - SQL Server Docker Compose configuration
 - GitHub Actions build and test workflow
 
-**Patient API branch:** Clinic-scoped patient creation, retrieval, search, update, staff bearer login and basic patient audit events are implemented. Staff account provisioning, SQL-backed API integration tests, appointment APIs, reporting and booking concurrency are still outstanding. See [patient API specification](docs/patient-api.md).
+**Patient API branch:** Clinic-scoped patient creation, retrieval, search, update, staff bearer login and basic patient audit events are implemented. Initial administrator provisioning and SQL-backed patient integration tests are implemented. Appointment scheduling and concurrency tests are on the current feature branch; reporting and subsequent staff onboarding remain outstanding. See [patient API specification](docs/patient-api.md) and [appointment API specification](docs/appointment-api.md).
 
 ## Prerequisites
 
