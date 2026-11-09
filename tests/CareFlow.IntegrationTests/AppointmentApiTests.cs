@@ -212,6 +212,56 @@ public sealed class AppointmentApiTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ClinicScheduleFiltersByPractitionerAndIncludesPersistedCheckIn()
+    {
+        var from = DateTime.UtcNow.Date.AddDays(25);
+        var end = from.AddMinutes(45);
+        var other = Guid.NewGuid();
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CareFlowDbContext>();
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var staff = await users.FindByEmailAsync(_email);
+            Assert.NotNull(staff);
+            db.Practitioners.Add(new Practitioner
+            {
+                Id = other, ClinicId = _clinicId,
+                FirstName = "Second", LastName = "Clinician"
+            });
+            db.Appointments.AddRange(
+                new Appointment
+                {
+                    ClinicId = _clinicId, PatientId = _patientId,
+                    PractitionerId = _practitionerId, CreatedByUserId = staff.Id,
+                    StartUtc = from, EndUtc = end, CheckedInAtUtc = from.AddMinutes(3)
+                },
+                new Appointment
+                {
+                    ClinicId = _clinicId, PatientId = _patientId,
+                    PractitionerId = other, CreatedByUserId = staff.Id,
+                    StartUtc = from, EndUtc = end
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var query = $"/api/v1/schedule?fromUtc={Uri.EscapeDataString(from.ToString("O"))}" +
+            $"&toUtc={Uri.EscapeDataString(from.AddDays(1).ToString("O"))}" +
+            $"&practitionerId={_practitionerId}";
+        var response = await _client.GetAsync(query);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = json.RootElement.GetProperty("items");
+        Assert.Single(items.EnumerateArray());
+        Assert.True(items[0].GetProperty("checkedInAtUtc").ValueKind != JsonValueKind.Null);
+
+        var unauthorized = await _app.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        }).GetAsync(query);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+    }
+
+    [Fact]
     public async Task CheckInAndCompletionEnforceLifecycleAndAuditHistory()
     {
         var id = Guid.NewGuid();
@@ -246,8 +296,9 @@ public sealed class AppointmentApiTests : IAsyncLifetime
 
         await using var verifyScope = _app.Services.CreateAsyncScope();
         var database = verifyScope.ServiceProvider.GetRequiredService<CareFlowDbContext>();
-        Assert.Equal(AppointmentStatus.Completed,
-            (await database.Appointments.AsNoTracking().SingleAsync(a => a.Id == id)).Status);
+        var stored = await database.Appointments.AsNoTracking().SingleAsync(a => a.Id == id);
+        Assert.Equal(AppointmentStatus.Completed, stored.Status);
+        Assert.NotNull(stored.CheckedInAtUtc);
         Assert.Equal(1, await database.AuditEvents.CountAsync(e => e.ClinicId == _clinicId &&
             e.EntityType == "Appointment" && e.EntityId == id.ToString() &&
             e.Action == "AppointmentCheckedIn"));
