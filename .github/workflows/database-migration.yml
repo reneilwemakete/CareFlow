@@ -3,7 +3,7 @@ on:
   push:
     branches: [database-foundation]
     paths:
-      - '.github/workflows/database-migration.yml'
+      - 'src/CareFlow.Api/CareFlow.Api.csproj'
   workflow_dispatch:
 permissions:
   contents: write
@@ -30,12 +30,11 @@ jobs:
             --startup-project src/CareFlow.Api \
             --context CareFlowDbContext \
             --output-dir Persistence/Migrations \
-            --no-build
           dotnet ef migrations script --idempotent \
             --project src/CareFlow.Infrastructure \
             --startup-project src/CareFlow.Api \
             --context CareFlowDbContext \
-            --no-build -o /tmp/careflow-migration.sql
+             -o /tmp/careflow-migration.sql
           test -s /tmp/careflow-migration.sql
           dotnet ef migrations has-pending-model-changes \
             --project src/CareFlow.Infrastructure \
