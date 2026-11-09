@@ -177,4 +177,82 @@ public sealed class AppointmentApiTests : IAsyncLifetime
         });
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
+    [Fact]
+    public async Task RescheduleChecksAvailabilityAndRejectsStaleRowVersion()
+    {
+        var start = DateTime.UtcNow.AddDays(16);
+        await AllowAsync(start.AddHours(-1), start.AddHours(4));
+        var created = await _client.PostAsJsonAsync("/api/v1/appointments",
+            Booking(start, start.AddMinutes(30)));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        using var body = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+        var id = body.RootElement.GetProperty("id").GetGuid();
+        var version = body.RootElement.GetProperty("rowVersion").GetString();
+
+        var moved = await _client.PostAsJsonAsync($"/api/v1/appointments/{id}/reschedule", new
+        {
+            startUtc = start.AddHours(2), endUtc = start.AddHours(2).AddMinutes(30),
+            practitionerId = _practitionerId, rowVersion = version
+        });
+        Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+        using var newBody = JsonDocument.Parse(await moved.Content.ReadAsStringAsync());
+        Assert.NotEqual(version, newBody.RootElement.GetProperty("rowVersion").GetString());
+
+        var stale = await _client.PostAsJsonAsync($"/api/v1/appointments/{id}/reschedule", new
+        {
+            startUtc = start.AddHours(1), endUtc = start.AddHours(1).AddMinutes(30),
+            practitionerId = _practitionerId, rowVersion = version
+        });
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+
+        var oldSlot = await _client.PostAsJsonAsync("/api/v1/appointments",
+            Booking(start, start.AddMinutes(30)));
+        Assert.Equal(HttpStatusCode.Created, oldSlot.StatusCode);
+    }
+
+    [Fact]
+    public async Task CheckInAndCompletionEnforceLifecycleAndAuditHistory()
+    {
+        var id = Guid.NewGuid();
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CareFlowDbContext>();
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var staff = await users.FindByEmailAsync(_email);
+            Assert.NotNull(staff);
+            db.Appointments.Add(new Appointment
+            {
+                Id = id, ClinicId = _clinicId, PatientId = _patientId,
+                PractitionerId = _practitionerId, CreatedByUserId = staff.Id,
+                StartUtc = DateTime.UtcNow.AddMinutes(-5),
+                EndUtc = DateTime.UtcNow.AddMinutes(25)
+            });
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await _client.PostAsync($"/api/v1/appointments/{id}/complete", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await _client.PostAsync($"/api/v1/appointments/{id}/check-in", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await _client.PostAsync($"/api/v1/appointments/{id}/check-in", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await _client.PostAsync($"/api/v1/appointments/{id}/cancel", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await _client.PostAsync($"/api/v1/appointments/{id}/complete", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await _client.PostAsync($"/api/v1/appointments/{id}/complete", null)).StatusCode);
+
+        await using var verifyScope = _app.Services.CreateAsyncScope();
+        var database = verifyScope.ServiceProvider.GetRequiredService<CareFlowDbContext>();
+        Assert.Equal(AppointmentStatus.Completed,
+            (await database.Appointments.AsNoTracking().SingleAsync(a => a.Id == id)).Status);
+        Assert.Equal(1, await database.AuditEvents.CountAsync(e => e.ClinicId == _clinicId &&
+            e.EntityType == "Appointment" && e.EntityId == id.ToString() &&
+            e.Action == "AppointmentCheckedIn"));
+        Assert.Equal(1, await database.AuditEvents.CountAsync(e => e.ClinicId == _clinicId &&
+            e.EntityType == "Appointment" && e.EntityId == id.ToString() &&
+            e.Action == "AppointmentCompleted"));
+    }
+
 }
