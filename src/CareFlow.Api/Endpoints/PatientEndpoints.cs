@@ -106,6 +106,15 @@ public static class PatientEndpoints
                 Email = request.Email?.Trim()
             };
             db.Patients.Add(patient);
+            db.AuditEvents.Add(new AuditEvent
+            {
+                ClinicId = staff.ClinicId,
+                ActorUserId = staff.Id,
+                Action = "PatientCreated",
+                EntityType = "Patient",
+                EntityId = patient.Id.ToString(),
+                CorrelationId = System.Diagnostics.Activity.Current?.Id
+            });
             try
             {
                 await db.SaveChangesAsync(token);
@@ -188,6 +197,15 @@ public static class PatientEndpoints
             patient.PhoneNumber = request.PhoneNumber?.Trim();
             patient.Email = request.Email?.Trim();
             patient.UpdatedAtUtc = DateTime.UtcNow;
+            db.AuditEvents.Add(new AuditEvent
+            {
+                ClinicId = staff.ClinicId,
+                ActorUserId = staff.Id,
+                Action = "PatientUpdated",
+                EntityType = "Patient",
+                EntityId = patient.Id.ToString(),
+                CorrelationId = System.Diagnostics.Activity.Current?.Id
+            });
             try { await db.SaveChangesAsync(token); }
             catch (DbUpdateConcurrencyException)
             {
