@@ -24,7 +24,7 @@ public static class AuthenticationEndpoints
                 return Results.Unauthorized();
 
             var staff = await users.FindByEmailAsync(request.Email.Trim());
-            if (staff is null || !staff.IsActive ||
+            if (staff is null || !staff.IsActive || !staff.EmailConfirmed ||
                 !await db.Clinics.AnyAsync(c => c.Id == staff.ClinicId && c.IsActive, cancellationToken) ||
                 await users.IsLockedOutAsync(staff))
                 return Results.Unauthorized();

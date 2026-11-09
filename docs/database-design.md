@@ -1,25 +1,36 @@
-# Database Design (planned EF Core schema)
+# CareFlow SQL Server database design
 
-| Entity | Key | Important relationships and constraints |
-|---|---|---|
-| Clinic | Id (GUID) | Unique Code; tenant boundary |
-| Patient | Id (GUID) | ClinicId FK; unique (ClinicId, PatientNumber); (ClinicId, Id) alternate key; rowversion |
-| Practitioner | Id (GUID) | ClinicId FK; optional UserId -> AspNetUsers; (ClinicId, Id) alternate key |
-| PractitionerAvailability | Id (GUID) | composite (ClinicId, PractitionerId) -> Practitioner; interval check |
-| Appointment | Id (GUID) | composite patient and practitioner FKs constrained by ClinicId; interval and status checks; rowversion |
-| AuditEvent | Id (BIGINT identity) | ClinicId FK and optional ActorUserId |
-| AspNetUsers / AspNetRoles | Identity keys | ASP.NET Core Identity-managed authentication tables |
+CareFlow uses EF Core 10 with SQL Server. The committed migrations are the canonical schema history; do **not** regenerate `InitialCreate` from the current model.
 
-Indexes cover patient number uniqueness and appointment queries by practitioner and patient. Cross-clinic relationship integrity uses composite alternate keys. Restrict cascades to preserve historical records.
+| Table | Primary key | Main constraints |
+| --- | --- | --- |
+| Clinics | Id (GUID) | Unique clinic Code |
+| Patients | Id (GUID) | ClinicId FK; unique (ClinicId, PatientNumber); alternate key (ClinicId, Id); SQL Server rowversion |
+| Practitioners | Id (GUID) | ClinicId FK; optional Identity UserId; alternate key (ClinicId, Id) |
+| PractitionerAvailability | Id (GUID) | Composite (ClinicId, PractitionerId) reference; start before end check |
+| Appointments | Id (GUID) | Composite clinic-scoped Patient and Practitioner FKs; interval/status checks; SQL Server rowversion; nullable CheckedInAtUtc |
+| AuditEvents | Id (BIGINT) | ClinicId FK, optional actor user FK and timestamps |
+| AspNetUsers / AspNetRoles | Identity-managed | Password hashes, staff roles and clinic membership |
 
-## UTC conventions
-Use DateTime UTC at the API boundary; SQL Server datetime2 does not preserve DateTime.Kind, so rehydrate UTC explicitly in the application/database boundary before comparing business-rule dates.
+Indexes support patient number uniqueness and appointment queries by practitioner, patient and start time. Cross-clinic relationships are restricted through composite alternate keys. Audit events preserve minimal action metadata rather than patient contact details.
 
-## Migration workflow
-From the root after configuring ConnectionStrings__CareFlowDb:
+## Migration history
 
-	net tool install --global dotnet-ef --version 10.0.0
-	dotnet ef migrations add InitialCreate --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext --output-dir Persistence/Migrations
-	dotnet ef database update --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext
+The repository includes:
+- `InitialCreate`, which establishes the clinic, patient, practitioner, availability, appointment, audit and Identity tables.
+- `PersistAppointmentCheckIn`, which adds `CheckedInAtUtc` and backfills legacy check-ins from matching historical audit events.
 
-Review the generated migration for constraints, foreign keys and indexes before applying. Do not run EnsureCreated on a database managed by migrations.
+To apply existing migrations to a disposable development SQL Server:
+
+```bash
+dotnet tool install --global dotnet-ef --version 10.0.14
+dotnet ef database update --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext
+```
+
+Set `ConnectionStrings__CareFlowDb` first. Never use `EnsureCreated` on a database managed by migrations. GitHub Actions validates the model snapshot and applies the committed migrations against a disposable SQL Server instance.
+
+## UTC and concurrency
+
+The HTTP API requires UTC timestamps. SQL Server `datetime2` does not retain the .NET `DateTime.Kind` flag, so comparisons must be explicit and clients must send ISO 8601 UTC values ending in `Z`. Application checks and database constraints verify valid intervals.
+
+SQL Server SERIALIZABLE transactions guard the time-range conflict check and appointment insert/reschedule. Rowversion guards stale edits. These techniques do not replace a production database and application security review.

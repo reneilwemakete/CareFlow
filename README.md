@@ -1,82 +1,137 @@
 # CareFlow
 
-A backend-first healthcare appointment management **portfolio project** built with C#, ASP.NET Core, EF Core and Microsoft SQL Server.
+**A healthcare operations backend portfolio project built with C#, ASP.NET Core 10, Entity Framework Core and SQL Server.**
 
-**Status: Database foundation and Patient Management API merged; appointment scheduling in review.** This is not a deployed healthcare system. Use fictional patient and clinic data only.
+CareFlow demonstrates multi-clinic access control, staff authentication, patient and practitioner management, transaction-safe appointment scheduling, lifecycle tracking and aggregate operational reporting.
 
-## Included
+> **Portfolio prototype only.** Use fictional patient and clinic data. This is not a deployed, clinically validated or regulatory-compliant healthcare system.
 
-- .NET 10 solution with API, Domain, Application and Infrastructure projects
-- SQL Server EF Core DbContext and mappings for clinics, patients, practitioners, availability, appointments and audit events
-- ASP.NET Core Identity persistence model for staff users and roles
-- Appointment interval rule and xUnit unit tests
-- OpenAPI document in Development and a public process liveness endpoint at `/health/live`
-- SQL Server Docker Compose configuration
-- GitHub Actions build and test workflow
+## Capabilities
 
-**Patient API branch:** Clinic-scoped patient creation, retrieval, search, update, staff bearer login and basic patient audit events are implemented. Initial administrator provisioning and SQL-backed patient integration tests are implemented. Appointment scheduling and concurrency tests are on the current feature branch; reporting and subsequent staff onboarding remain outstanding. See [patient API specification](docs/patient-api.md) and [appointment API specification](docs/appointment-api.md).
+| Area | Functionality |
+| --- | --- |
+| Authentication | ASP.NET Core Identity bearer tokens, login lockout, restricted initial administrator bootstrap |
+| Patients | Create, search, view and update clinic-scoped patient records with SQL Server concurrency control |
+| Practitioners | Register, find, update and deactivate practitioners; block deactivation with upcoming bookings |
+| Scheduling | Define availability, book appointments, prevent practitioner and patient double bookings, cancel or reschedule |
+| Lifecycle | Record check-in time, prevent duplicate check-in, complete appointments, retain audit history |
+| Clinic view | Browse a seven-day UTC schedule with optional practitioner filter |
+| Reporting | Administrator-only appointment counts, status breakdown, attendance proxy and practitioner workload |
+| Verification | .NET builds, unit tests, EF Core migration validation and SQL Server integration tests in GitHub Actions |
 
-## Prerequisites
+CareFlow is a **backend-first modular monolith**. There is no web or mobile UI.
 
-1. .NET 10 SDK
-2. Docker Desktop with SQL Server-compatible architecture support **or** an existing SQL Server instance
-3. `dotnet-ef` version 10 for migrations
+## Architecture
 
-## Run with local SQL Server
+```mermaid
+flowchart TD
+    Client[Staff API Client] --> API[ASP.NET Core API]
+    API --> Auth[Identity Bearer Authentication]
+    API --> UseCases[Clinic-scoped Endpoint Logic]
+    UseCases --> Domain[Domain Entities and Rules]
+    UseCases --> EF[EF Core Infrastructure]
+    Auth --> EF
+    EF --> SQL[(SQL Server)]
+    CI[GitHub Actions] --> Tests[Unit and SQL Integration Tests]
+    Tests --> API
+    Tests --> SQL
+```
 
-1. Copy `.env.example` to `.env` and replace its placeholder with a strong password.
-2. Start SQL Server:
+See [architecture](docs/architecture.md), [database design](docs/database-design.md) and the [portfolio case study](docs/portfolio-case-study.md).
 
-   ```sh
+## Run locally
+
+**Requirements:** .NET 10 SDK, Docker Desktop with a compatible SQL Server container runtime (or your own SQL Server 2022+ instance), and `dotnet-ef` 10.0.14.
+
+1. Create a local `.env` from `.env.example`, replacing the SQL administrator password with a unique strong value. The `.env` file is ignored by Git.
+2. Start the development database:
+
+   ```bash
    docker compose up -d
    ```
 
-3. Provide the **same password** in your local connection string (never commit it):
+3. Set the `ConnectionStrings__CareFlowDb` environment variable with the same local database password. Example format (replace the placeholder privately):
 
-   ```sh
-   export ConnectionStrings__CareFlowDb='Server=localhost,1433;Database=CareFlowDb;User Id=sa;Password=YOUR_PASSWORD;Encrypt=True;TrustServerCertificate=True'
+   ```text
+   Server=localhost,1433;Database=CareFlowDb;User Id=sa;Password=YOUR_LOCAL_PASSWORD;Encrypt=True;TrustServerCertificate=True
    ```
 
-   For Windows PowerShell:
+   Do not put real credentials into source code, committed scripts or screenshots.
 
-   ```powershell
-   $env:ConnectionStrings__CareFlowDb='Server=localhost,1433;Database=CareFlowDb;User Id=sa;Password=YOUR_PASSWORD;Encrypt=True;TrustServerCertificate=True'
-   ```
+4. Apply the **committed** EF Core migrations:
 
-4. Restore and build:
-
-   ```sh
-   dotnet restore CareFlow.slnx
-   dotnet build CareFlow.slnx
-   dotnet test CareFlow.slnx
-   ```
-
-5. Apply the **already committed** initial EF migration:
-
-   ```sh
+   ```bash
    dotnet tool install --global dotnet-ef --version 10.0.14
    dotnet ef database update --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext
    ```
 
-6. Start the API:
+5. Build and run:
 
-   ```sh
+   ```bash
+   dotnet restore CareFlow.slnx
+   dotnet build CareFlow.slnx
+   dotnet test CareFlow.slnx
    dotnet run --project src/CareFlow.Api --launch-profile http
    ```
 
-   Liveness: `http://localhost:5084/health/live`
-   OpenAPI document: `http://localhost:5084/openapi/v1.json`
+   Local development endpoints: `http://localhost:5084/health/live` and `http://localhost:5084/openapi/v1.json`. The launch profile uses HTTP **only for local development**. Use HTTPS for actual authentication and API calls outside localhost.
 
-The SQL Server SA login and `TrustServerCertificate=True` are **local development only**. Use separate limited-privilege credentials and proper certificate validation for non-local environments. SQL Server container images may require an x86-64 compatible Docker environment on Apple Silicon.
+6. Provision the first administrator for a **new fictional clinic** using the guarded CLI. Set `CAREFLOW_BOOTSTRAP_CLINIC_CODE`, `CAREFLOW_BOOTSTRAP_CLINIC_NAME`, `CAREFLOW_BOOTSTRAP_EMAIL` and `CAREFLOW_BOOTSTRAP_PASSWORD` privately as environment variables, then run:
 
-## Clinic scheduling and check-in
+   ```bash
+   dotnet run --project tools/CareFlow.Bootstrap -- --confirm-initial-admin
+   ```
 
-The `feature/clinic-schedule-checkin` branch adds persisted appointment check-in timestamps and an authenticated clinic schedule read endpoint, with a SQL Server migration. See [clinic scheduling documentation](docs/scheduling-dashboard.md).
+   This command refuses to re-provision an existing clinic; it is not a public signup flow.
 
-## Database and architecture
+7. Sign in via `POST /api/v1/auth/login` and use the returned `accessToken` in the `Authorization: Bearer ...` header. Follow the fictional-data [demo runbook](docs/demo-runbook.md).
 
-See [requirements](docs/requirements.md), [architecture](docs/architecture.md) and [database design](docs/database-design.md).
+The SQL Server SA account and `TrustServerCertificate=True` are for **local development only**. Apple Silicon users may need SQL Server-compatible emulation or a separately hosted SQL Server.
 
-## Verification status
+## Key API routes
 
-GitHub Actions has successfully compiled the .NET solution, run the existing unit tests, and applied the committed InitialCreate migration to a disposable SQL Server instance. Patient API request flows have not yet received end-to-end integration testing against a live API and authenticated staff account. This is an educational prototype only.
+| Method | Route | Purpose |
+| --- | --- | --- |
+| POST | `/api/v1/auth/login` | Staff login |
+| GET / POST / PUT | `/api/v1/patients` | Clinic patient management (individual updates use `/{id}`) |
+| GET / POST / PUT | `/api/v1/practitioners` | Practitioner management |
+| POST | `/api/v1/practitioners/{id}/deactivate` | Deactivate practitioner safely |
+| GET / POST | `/api/v1/availability` | Practitioner availability |
+| POST | `/api/v1/appointments` | Book appointment |
+| GET | `/api/v1/appointments/{id}` | Appointment detail |
+| POST | `/api/v1/appointments/{id}/reschedule` | Move booking |
+| POST | `/api/v1/appointments/{id}/cancel` | Cancel booking |
+| POST | `/api/v1/appointments/{id}/check-in` | Record arrival |
+| POST | `/api/v1/appointments/{id}/complete` | Complete checked-in booking |
+| GET | `/api/v1/schedule` | Clinic schedule |
+| GET | `/api/v1/reports/appointments` | Administrator reporting |
+
+See [patient API](docs/patient-api.md), [appointment API](docs/appointment-api.md), [appointment lifecycle](docs/appointment-lifecycle.md), [practitioner API](docs/practitioner-api.md), [clinic scheduling](docs/scheduling-dashboard.md) and [reporting](docs/clinic-reporting.md).
+
+## Testing
+
+```bash
+dotnet test CareFlow.slnx
+dotnet test tests/CareFlow.IntegrationTests/CareFlow.IntegrationTests.csproj
+```
+
+The integration suite requires a running SQL Server and the `ConnectionStrings__CareFlowDb` environment variable. **Use a disposable test database**: tests create fictional clinics, users, patients and bookings.
+
+GitHub Actions runs the integration suite against a disposable SQL Server container. A separate workflow validates EF Core model/migration consistency and applies committed migrations. Review the green checks on each PR; test counts can change as coverage expands.
+
+## Security and limits
+
+- The caller never chooses a tenant/clinic ID in patient, practitioner, scheduling or reporting operations.
+- Access is checked against active clinic membership and current staff roles.
+- Sensitive API responses are marked non-cacheable, and initial login is rate limited.
+- Booking uses SQL Server SERIALIZABLE transactions plus rowversion-based update checks.
+- A completed booking stays in the database for historical reporting; check-in has its own persisted timestamp.
+- Subsequent staff onboarding, token revocation, production deployment, audit retention, threat modelling and real healthcare compliance are **out of scope** for this portfolio release.
+
+See [hardening notes](docs/backend-hardening.md) for limitations and additional production controls.
+
+## Portfolio walkthrough
+
+A reviewer can follow the [demo runbook](docs/demo-runbook.md) to provision a fictional clinic, register a patient and practitioner, create availability, book an appointment, observe a conflict and inspect an administrator report.
+
+**Project scope:** backend architecture, secure access, relational data modelling, REST endpoints, transactional booking and automated integration testing.

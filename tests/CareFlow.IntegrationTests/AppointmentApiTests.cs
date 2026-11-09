@@ -307,4 +307,39 @@ public sealed class AppointmentApiTests : IAsyncLifetime
             e.Action == "AppointmentCompleted"));
     }
 
+    [Fact]
+    public async Task PatientCannotBeDoubleBookedAcrossDifferentPractitioners()
+    {
+        var start = DateTime.UtcNow.AddDays(20);
+        var end = start.AddMinutes(30);
+        var secondPractitioner = Guid.NewGuid();
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CareFlowDbContext>();
+            db.Practitioners.Add(new Practitioner
+            {
+                Id = secondPractitioner, ClinicId = _clinicId,
+                FirstName = "Another", LastName = "Practitioner"
+            });
+            db.PractitionerAvailabilities.Add(new PractitionerAvailability
+            {
+                ClinicId = _clinicId, PractitionerId = secondPractitioner,
+                StartUtc = start.AddHours(-1), EndUtc = end.AddHours(1),
+                IsAvailable = true
+            });
+            await db.SaveChangesAsync();
+        }
+        await AllowAsync(start.AddHours(-1), end.AddHours(1));
+        Assert.Equal(HttpStatusCode.Created,
+            (await _client.PostAsJsonAsync("/api/v1/appointments", Booking(start, end))).StatusCode);
+
+        var conflicting = await _client.PostAsJsonAsync("/api/v1/appointments", new
+        {
+            patientId = _patientId, practitionerId = secondPractitioner,
+            startUtc = start.AddMinutes(5), endUtc = end.AddMinutes(5),
+            reasonForVisit = "Fictional appointment conflict test"
+        });
+        Assert.Equal(HttpStatusCode.Conflict, conflicting.StatusCode);
+    }
+
 }

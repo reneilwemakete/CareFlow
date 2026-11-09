@@ -29,16 +29,16 @@ The latest `rowVersion` is required to prevent stale writes. Rescheduling uses S
 
 Check-in is allowed from 30 minutes before the appointment starts until just before it ends. A second check-in returns HTTP 409.
 
-**Current data model limitation:** A check-in is recorded as an `AppointmentCheckedIn` entry in `AuditEvents`; the appointment's persisted `Status` remains `Scheduled` until it is completed. The check-in response includes `checkedIn: true`. A future migration should add an explicit check-in timestamp or state to the appointment record and expose it in GET responses.
+**Current implementation:** A successful check-in persists `CheckedInAtUtc` on the appointment and records a separate `AppointmentCheckedIn` audit event in the same transaction. The appointment's `Status` remains `Scheduled` until completion. GET responses expose `checkedInAtUtc`; lifecycle responses also include `checkedIn`. The `PersistAppointmentCheckIn` migration backfills prior check-ins recorded in audit history.
 
 Checked-in appointments cannot be cancelled or rescheduled through the existing endpoints.
 
 ## Completion
 
-Completion requires that the scheduled appointment has started and has a recorded check-in. It sets `Status = Completed` and writes an `AppointmentCompleted` audit event. Repeating completion returns HTTP 409.
+Completion requires that the scheduled appointment has started and has a persisted `CheckedInAtUtc` value. It sets `Status = Completed` and writes an `AppointmentCompleted` audit event. Repeating completion returns HTTP 409.
 
 ## Tests
 
 SQL Server integration tests verify rescheduling, token staleness, releasing the old slot, duplicate check-in prevention, cancellation rejection after check-in, completion gating and audit entries, alongside existing patient, practitioner and scheduling scenarios.
 
-Outstanding: model-level check-in timestamp/state, lifecycle-specific permissions, patient-side scheduling policies, comprehensive concurrent transition load tests and production deployment controls.
+Outstanding: lifecycle-specific permissions, robust no-show transitions, comprehensive concurrent transition load tests and production deployment controls.
