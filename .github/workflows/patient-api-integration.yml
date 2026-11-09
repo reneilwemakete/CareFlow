@@ -5,6 +5,7 @@ on:
     branches:
       - feature/patient-management
       - feature/appointment-scheduling
+      - feature/practitioner-management
   pull_request:
   workflow_dispatch:
 
