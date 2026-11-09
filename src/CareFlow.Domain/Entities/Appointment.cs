@@ -13,6 +13,7 @@ public sealed class Appointment
     public DateTime StartUtc { get; set; }
     public DateTime EndUtc { get; set; }
     public AppointmentStatus Status { get; set; } = AppointmentStatus.Scheduled;
+    public DateTime? CheckedInAtUtc { get; set; }
     public string? ReasonForVisit { get; set; }
     public string CreatedByUserId { get; set; } = string.Empty;
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
