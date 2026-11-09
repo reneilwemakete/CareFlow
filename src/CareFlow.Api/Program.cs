@@ -52,8 +52,8 @@ app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/api/v1"))
     {
-        context.Response.Headers.CacheControl = "no-store";
-        context.Response.Headers.XContentTypeOptions = "nosniff";
+        context.Response.Headers["Cache-Control"] = "no-store";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     }
     await next();
 });
