@@ -26,8 +26,15 @@ public static class AuthenticationEndpoints
             var staff = await users.FindByEmailAsync(request.Email.Trim());
             if (staff is null || !staff.IsActive ||
                 !await db.Clinics.AnyAsync(c => c.Id == staff.ClinicId && c.IsActive, cancellationToken) ||
-                !await users.CheckPasswordAsync(staff, request.Password))
+                await users.IsLockedOutAsync(staff))
                 return Results.Unauthorized();
+
+            if (!await users.CheckPasswordAsync(staff, request.Password))
+            {
+                await users.AccessFailedAsync(staff);
+                return Results.Unauthorized();
+            }
+            await users.ResetAccessFailedCountAsync(staff);
 
             var roles = await users.GetRolesAsync(staff);
             if (!roles.Any(role => role is "Administrator" or "Receptionist" or "Practitioner"))
