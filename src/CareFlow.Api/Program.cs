@@ -58,6 +58,7 @@ app.MapAppointmentEndpoints();
 app.MapPractitionerEndpoints();
 app.MapAppointmentLifecycle();
 app.MapClinicSchedule();
+app.MapClinicReporting();
 
 app.Run();
 

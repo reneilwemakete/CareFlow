@@ -8,6 +8,7 @@ on:
       - feature/practitioner-management
       - feature/appointment-lifecycle
       - feature/clinic-schedule-checkin
+      - feature/clinic-reporting
   pull_request:
   workflow_dispatch:
 
