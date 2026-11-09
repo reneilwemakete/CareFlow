@@ -135,6 +135,15 @@ public static class AppointmentEndpoints
                 if (overlaps)
                     return Results.Conflict(new { message = "Practitioner already has a booking in this interval." });
 
+                // A patient cannot be booked into two simultaneous active appointments,
+                // even when the practitioners differ.
+                var patientOverlap = await db.Appointments.AnyAsync(a =>
+                    a.ClinicId == staff.ClinicId && a.PatientId == request.PatientId &&
+                    a.Status == AppointmentStatus.Scheduled &&
+                    a.StartUtc < request.EndUtc && a.EndUtc > request.StartUtc, ct);
+                if (patientOverlap)
+                    return Results.Conflict(new { message = "Patient already has a booking in this interval." });
+
                 var appointment = new Appointment
                 {
                     ClinicId = staff.ClinicId, PatientId = request.PatientId,

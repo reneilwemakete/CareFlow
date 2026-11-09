@@ -104,6 +104,14 @@ public static class AppointmentLifecycleEndpoints
                 if (!available || blocked || overlapping)
                     return Results.Conflict(new { message = "The requested practitioner or timeslot is unavailable." });
 
+                var patientOverlap = await db.Appointments.AnyAsync(a =>
+                    a.ClinicId == staff.ClinicId && a.Id != id &&
+                    a.PatientId == appointment.PatientId &&
+                    a.Status == AppointmentStatus.Scheduled &&
+                    a.StartUtc < request.EndUtc && a.EndUtc > request.StartUtc, ct);
+                if (patientOverlap)
+                    return Results.Conflict(new { message = "Patient already has an appointment at that time." });
+
                 db.Entry(appointment).Property(a => a.RowVersion).OriginalValue = original;
                 appointment.PractitionerId = request.PractitionerId;
                 appointment.StartUtc = request.StartUtc;
