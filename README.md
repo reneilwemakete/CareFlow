@@ -54,7 +54,7 @@ A backend-first healthcare appointment management **portfolio project** built wi
 5. Generate, **inspect**, and apply the initial EF migration:
 
    ```sh
-   dotnet tool install --global dotnet-ef --version 10.0.0
+   dotnet tool install --global dotnet-ef --version 10.0.14
    dotnet ef migrations add InitialCreate --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext --output-dir Persistence/Migrations
    dotnet ef database update --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext
    ```
