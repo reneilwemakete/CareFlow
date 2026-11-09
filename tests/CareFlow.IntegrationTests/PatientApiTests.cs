@@ -155,6 +155,48 @@ public sealed class PatientApiTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task InvalidPasswordRecordsFailedLogin()
+    {
+        var login = await _client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            email = _adminEmail, password = "WrongPassword!12345"
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
+
+        await using var scope = _app.Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var staff = await users.FindByEmailAsync(_adminEmail);
+        Assert.NotNull(staff);
+        Assert.Equal(1, await users.GetAccessFailedCountAsync(staff));
+    }
+
+    [Fact]
+    public async Task PractitionerCannotManagePatients()
+    {
+        var email = $"practitioner-{Guid.NewGuid():N}@example.test";
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = new ApplicationUser
+            {
+                Email = email, UserName = email, ClinicId = _firstClinic,
+                EmailConfirmed = true, LockoutEnabled = true
+            };
+            Assert.True((await users.CreateAsync(user, Password)).Succeeded);
+            Assert.True((await users.AddToRoleAsync(user, "Practitioner")).Succeeded);
+        }
+
+        var login = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = Password });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        using var json = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
+        var token = json.RootElement.GetProperty("accessToken").GetString();
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var result = await _client.GetAsync("/api/v1/patients");
+        Assert.Equal(HttpStatusCode.Forbidden, result.StatusCode);
+    }
+
+    [Fact]
     public async Task PatientsFromOtherClinicsAreInvisible()
     {
         Guid foreignId = Guid.NewGuid();
