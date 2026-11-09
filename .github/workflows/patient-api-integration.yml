@@ -6,6 +6,7 @@ on:
       - feature/patient-management
       - feature/appointment-scheduling
       - feature/practitioner-management
+      - feature/appointment-lifecycle
   pull_request:
   workflow_dispatch:
 
