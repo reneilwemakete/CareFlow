@@ -55,6 +55,7 @@ app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "Care
 app.MapStaffAuthentication();
 app.MapPatientEndpoints();
 app.MapAppointmentEndpoints();
+app.MapPractitionerEndpoints();
 
 app.Run();
 
