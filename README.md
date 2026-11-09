@@ -2,7 +2,7 @@
 
 A backend-first healthcare appointment management **portfolio project** built with C#, ASP.NET Core, EF Core and Microsoft SQL Server.
 
-**Status: Phase 1 foundation scaffold.** This is not a deployed healthcare system. Use fictional patient and clinic data only.
+**Status: Database foundation verified; patient API in development.** This is not a deployed healthcare system. Use fictional patient and clinic data only.
 
 ## Included
 
@@ -14,7 +14,7 @@ A backend-first healthcare appointment management **portfolio project** built wi
 - SQL Server Docker Compose configuration
 - GitHub Actions build and test workflow
 
-**Not yet built:** Login endpoints, role policies, patient and appointment APIs, SQL transaction concurrency controls, reporting, audit event emission and integration tests. They are future phases.
+**Patient API branch:** Clinic-scoped patient creation, retrieval, search, update, staff bearer login and basic patient audit events are implemented. Staff account provisioning, SQL-backed API integration tests, appointment APIs, reporting and booking concurrency are still outstanding. See [patient API specification](docs/patient-api.md).
 
 ## Prerequisites
 
@@ -51,11 +51,10 @@ A backend-first healthcare appointment management **portfolio project** built wi
    dotnet test CareFlow.slnx
    ```
 
-5. Generate, **inspect**, and apply the initial EF migration:
+5. Apply the **already committed** initial EF migration:
 
    ```sh
    dotnet tool install --global dotnet-ef --version 10.0.14
-   dotnet ef migrations add InitialCreate --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext --output-dir Persistence/Migrations
    dotnet ef database update --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext
    ```
 
@@ -76,4 +75,4 @@ See [requirements](docs/requirements.md), [architecture](docs/architecture.md) a
 
 ## Verification status
 
-This scaffold was authored without an installed .NET SDK or SQL Server in the creation environment. It has **not** been compiled, run, or migrated. The first GitHub Actions run is required to validate compilation and tests after uploading the code. No migration file has been generated yet: generate it with the EF CLI as instructed above.
+GitHub Actions has successfully compiled the .NET solution, run the existing unit tests, and applied the committed InitialCreate migration to a disposable SQL Server instance. Patient API request flows have not yet received end-to-end integration testing against a live API and authenticated staff account. This is an educational prototype only.

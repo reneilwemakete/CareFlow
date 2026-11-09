@@ -1,0 +1,77 @@
+name: Patient API SQL Server integration tests
+
+on:
+  push:
+    branches:
+      - feature/patient-management
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sql-api-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore test project and bootstrap CLI
+        run: |
+          dotnet restore tests/CareFlow.IntegrationTests/CareFlow.IntegrationTests.csproj
+          dotnet restore tools/CareFlow.Bootstrap/CareFlow.Bootstrap.csproj
+
+      - name: Build test project and bootstrap CLI
+        run: |
+          dotnet build tests/CareFlow.IntegrationTests/CareFlow.IntegrationTests.csproj --no-restore
+          dotnet build tools/CareFlow.Bootstrap/CareFlow.Bootstrap.csproj --no-restore
+
+      - name: Generate temporary database password
+        shell: bash
+        run: |
+          DB_PASSWORD="$(openssl rand -hex 20)Aa1!"
+          echo "::add-mask::$DB_PASSWORD"
+          echo "ConnectionStrings__CareFlowDb=Server=127.0.0.1,1433;Database=CareFlowIntegrationTests;User Id=sa;Password=$DB_PASSWORD;Encrypt=True;TrustServerCertificate=True" >> "$GITHUB_ENV"
+          echo "CI_SQL_PASSWORD=$DB_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Start disposable SQL Server
+        shell: bash
+        run: |
+          docker run -d --name careflow-patient-sql \
+            -e ACCEPT_EULA=Y \
+            -e MSSQL_SA_PASSWORD="$CI_SQL_PASSWORD" \
+            -p 127.0.0.1:1433:1433 \
+            mcr.microsoft.com/mssql/server:2022-latest
+
+          for i in {1..60}; do
+            if docker logs careflow-patient-sql 2>&1 | grep -q 'SQL Server is now ready for client connections'; then
+              exit 0
+            fi
+            if ! docker ps --format '{{.Names}}' | grep -q '^careflow-patient-sql$'; then
+              docker logs careflow-patient-sql
+              exit 1
+            fi
+            sleep 2
+          done
+          docker logs careflow-patient-sql
+          exit 1
+
+      - name: Verify initial admin provisioner
+        env:
+          CAREFLOW_BOOTSTRAP_CLINIC_CODE: INTEG-1
+          CAREFLOW_BOOTSTRAP_CLINIC_NAME: Fictional Integration Clinic
+          CAREFLOW_BOOTSTRAP_EMAIL: admin@example.test
+          CAREFLOW_BOOTSTRAP_PASSWORD: IntegrationClinic!12345
+        run: |
+          dotnet run --project tools/CareFlow.Bootstrap/CareFlow.Bootstrap.csproj --no-build -- --confirm-initial-admin
+          if dotnet run --project tools/CareFlow.Bootstrap/CareFlow.Bootstrap.csproj --no-build -- --confirm-initial-admin; then
+            echo "Unexpected success: duplicate bootstrap should be refused" >&2
+            exit 1
+          fi
+
+      - name: Test authenticated Patient API against SQL Server
+        run: dotnet test tests/CareFlow.IntegrationTests/CareFlow.IntegrationTests.csproj --no-build --logger "console;verbosity=normal"
