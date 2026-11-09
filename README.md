@@ -69,6 +69,10 @@ A backend-first healthcare appointment management **portfolio project** built wi
 
 The SQL Server SA login and `TrustServerCertificate=True` are **local development only**. Use separate limited-privilege credentials and proper certificate validation for non-local environments. SQL Server container images may require an x86-64 compatible Docker environment on Apple Silicon.
 
+## Clinic scheduling and check-in
+
+The `feature/clinic-schedule-checkin` branch adds persisted appointment check-in timestamps and an authenticated clinic schedule read endpoint, with a SQL Server migration. See [clinic scheduling documentation](docs/scheduling-dashboard.md).
+
 ## Database and architecture
 
 See [requirements](docs/requirements.md), [architecture](docs/architecture.md) and [database design](docs/database-design.md).
