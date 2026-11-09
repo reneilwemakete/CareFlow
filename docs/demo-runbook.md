@@ -6,13 +6,13 @@ This walkthrough is for a **fictional clinic only**. Do not use real patient ide
 
 Follow [README local setup](../README.md#run-locally) to start SQL Server, apply the committed EF migrations, run the API and provision the initial fictional clinic administrator.
 
-The examples below assume the API is running at \`http://localhost:5084\` on a trusted local development machine. The login endpoint should be accessed over HTTPS in any networked or deployed environment.
+The examples below assume the API is running at `http://localhost:5084` on a trusted local development machine. The login endpoint should be accessed over HTTPS in any networked or deployed environment.
 
 Use a REST client such as Postman or curl. Never publish real bearer tokens in screenshots, terminal recordings or GitHub.
 
 ## Demo 1: Log in
 
-\`\`\`http
+```http
 POST /api/v1/auth/login
 Content-Type: application/json
 
@@ -20,17 +20,17 @@ Content-Type: application/json
   "email": "fictional.admin@example.test",
   "password": "YOUR_LOCAL_DEMO_PASSWORD"
 }
-\`\`\`
+```
 
-Replace the email/password with the fictional account provisioned by the bootstrap CLI. The response contains an \`accessToken\` and expiration information. In subsequent requests, send the token in the Authorization header:
+Replace the email/password with the fictional account provisioned by the bootstrap CLI. The response contains an `accessToken` and expiration information. In subsequent requests, send the token in the Authorization header:
 
-\`\`\`http
+```http
 Authorization: Bearer YOUR_LOCAL_ACCESS_TOKEN
-\`\`\`
+```
 
 ## Demo 2: Register a patient
 
-\`\`\`http
+```http
 POST /api/v1/patients
 Authorization: Bearer YOUR_LOCAL_ACCESS_TOKEN
 Content-Type: application/json
@@ -43,13 +43,13 @@ Content-Type: application/json
   "phoneNumber": null,
   "email": null
 }
-\`\`\`
+```
 
-Note the returned patient \`id\` and \`rowVersion\`. Create the same patient number again to demonstrate a duplicate rejection with HTTP 409.
+Note the returned patient `id` and `rowVersion`. Create the same patient number again to demonstrate a duplicate rejection with HTTP 409.
 
 ## Demo 3: Create a practitioner
 
-\`\`\`http
+```http
 POST /api/v1/practitioners
 Authorization: Bearer YOUR_LOCAL_ACCESS_TOKEN
 Content-Type: application/json
@@ -59,15 +59,15 @@ Content-Type: application/json
   "lastName": "Practitioner",
   "specialty": "General Practice"
 }
-\`\`\`
+```
 
-Note the returned practitioner \`id\`.
+Note the returned practitioner `id`.
 
 ## Demo 4: Configure availability
 
 Choose a **future UTC date**. The following values are illustrative and must be updated to a future date before running the demonstration.
 
-\`\`\`http
+```http
 POST /api/v1/availability
 Authorization: Bearer YOUR_LOCAL_ACCESS_TOKEN
 Content-Type: application/json
@@ -78,11 +78,11 @@ Content-Type: application/json
   "endUtc": "2027-01-15T12:00:00Z",
   "isAvailable": true
 }
-\`\`\`
+```
 
 ## Demo 5: Book an appointment
 
-\`\`\`http
+```http
 POST /api/v1/appointments
 Authorization: Bearer YOUR_LOCAL_ACCESS_TOKEN
 Content-Type: application/json
@@ -94,25 +94,25 @@ Content-Type: application/json
   "endUtc": "2027-01-15T09:30:00Z",
   "reasonForVisit": "Fictional consultation"
 }
-\`\`\`
+```
 
 Replace the GUIDs and ensure the date matches your earlier future availability period. Try booking the same practitioner at an overlapping time. The second request should return HTTP 409.
 
-To demonstrate rescheduling, first GET the appointment and copy its latest \`rowVersion\`. Then POST to \`/api/v1/appointments/{id}/reschedule\` with a future available interval, practitioner ID and the copied token. A stale token should be rejected.
+To demonstrate rescheduling, first GET the appointment and copy its latest `rowVersion`. Then POST to `/api/v1/appointments/{id}/reschedule` with a future available interval, practitioner ID and the copied token. A stale token should be rejected.
 
 ## Demo 6: View the schedule and report
 
-\`\`\`http
+```http
 GET /api/v1/schedule?fromUtc=2027-01-15T00:00:00Z&toUtc=2027-01-16T00:00:00Z
 Authorization: Bearer YOUR_LOCAL_ACCESS_TOKEN
-\`\`\`
+```
 
-Optional: add \`practitionerId=...\` to filter the schedule.
+Optional: add `practitionerId=...` to filter the schedule.
 
-\`\`\`http
+```http
 GET /api/v1/reports/appointments?fromUtc=2027-01-01T00:00:00Z&toUtc=2027-02-01T00:00:00Z
 Authorization: Bearer YOUR_LOCAL_ACCESS_TOKEN
-\`\`\`
+```
 
 The reporting response includes totals and practitioner workload without returning patient names or contact details. The example January timestamps should be changed when demonstrating in another period.
 
