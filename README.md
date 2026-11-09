@@ -1,5 +1,10 @@
 # CareFlow
 
+[![CareFlow CI](https://github.com/reneilwemakete/CareFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/reneilwemakete/CareFlow/actions)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
+![C%23](https://img.shields.io/badge/C%23-Backend-239120)
+![SQL Server](https://img.shields.io/badge/Database-SQL%20Server-CC2927)
+
 **A healthcare operations backend portfolio project built with C#, ASP.NET Core 10, Entity Framework Core and SQL Server.**
 
 CareFlow demonstrates multi-clinic access control, staff authentication, patient and practitioner management, transaction-safe appointment scheduling, lifecycle tracking and aggregate operational reporting.
