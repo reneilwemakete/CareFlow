@@ -1,7 +1,11 @@
+using CareFlow.Api.Endpoints;
 using CareFlow.Infrastructure.Identity;
 using CareFlow.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,20 +22,39 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<CareFlowDbContext>();
 
+builder.Services.AddAuthentication(IdentityConstants.BearerScheme)
+    .AddBearerToken(IdentityConstants.BearerScheme, options =>
+    {
+        options.BearerTokenExpiration = TimeSpan.FromHours(1);
+    });
 builder.Services.AddAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("login", limiter =>
+    {
+        limiter.PermitLimit = 5;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+        limiter.AutoReplenishment = true;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
 app.UseHttpsRedirection();
+app.UseRateLimiter();
+app.UseAuthentication();
 app.UseAuthorization();
 
-// This public endpoint describes process availability, not DB readiness.
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "CareFlow.Api" }))
     .AllowAnonymous();
 
-// Do not add patient or appointment endpoints until authentication and object-level authorization are implemented.
+app.MapStaffAuthentication();
+app.MapPatientEndpoints();
+
 app.Run();
 
 public partial class Program { }
