@@ -1,51 +1,61 @@
-name: Generate and validate SQL Server migration
-on:  
- push:
-  branches: [database-foundation]
-  paths:
-    - '.github/workflows/database-migration.yml'
-    - 'src/CareFlow.Api/CareFlow.Api.csproj'
 
- workflow_dispatch:
+name: Generate and validate SQL Server migration
+
+on:
+  push:
+    branches:
+      - database-foundation
+    paths:
+      - '.github/workflows/database-migration.yml'
+      - 'src/CareFlow.Api/CareFlow.Api.csproj'
+  workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
   migration:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
       - name: Install EF Core tooling
         run: dotnet tool install --global dotnet-ef --version 10.0.14
+
       - name: Restore and build
         run: |
           dotnet restore CareFlow.slnx
           dotnet build CareFlow.slnx --no-restore
-      
- - name: Generate initial migration from EF model
-   env:
-    ConnectionStrings__CareFlowDb: 'Server=127.0.0.1,1433;Database=CareFlowDb;User Id=sa;Password=DesignTimeOnly_123!;Encrypt=True;TrustServerCertificate=True'
-  run: |
-    dotnet ef migrations add InitialCreate \
-      --project src/CareFlow.Infrastructure \
-      --startup-project src/CareFlow.Api \
-      --context CareFlowDbContext \
-      --output-dir Persistence/Migrations
 
-    dotnet ef migrations script --idempotent \
-      --project src/CareFlow.Infrastructure \
-      --startup-project src/CareFlow.Api \
-      --context CareFlowDbContext \
-      -o /tmp/careflow-migration.sql
+      - name: Generate initial migration from EF model
+        env:
+          ConnectionStrings__CareFlowDb: 'Server=127.0.0.1,1433;Database=CareFlowDb;User Id=sa;Password=DesignTimeOnly_123!;Encrypt=True;TrustServerCertificate=True'
+        run: |
+          dotnet ef migrations add InitialCreate \
+            --project src/CareFlow.Infrastructure \
+            --startup-project src/CareFlow.Api \
+            --context CareFlowDbContext \
+            --output-dir Persistence/Migrations
 
-    test -s /tmp/careflow-migration.sql
+          dotnet ef migrations script --idempotent \
+            --project src/CareFlow.Infrastructure \
+            --startup-project src/CareFlow.Api \
+            --context CareFlowDbContext \
+            -o /tmp/careflow-migration.sql
 
-    dotnet ef migrations has-pending-model-changes \
-      --project src/CareFlow.Infrastructure \
-      --startup-project src/CareFlow.Api \
-      --context CareFlowDbContext
+          test -s /tmp/careflow-migration.sql
+
+          dotnet ef migrations has-pending-model-changes \
+            --project src/CareFlow.Infrastructure \
+            --startup-project src/CareFlow.Api \
+            --context CareFlowDbContext
 
       - name: Generate temporary CI SQL password
         shell: bash
@@ -53,6 +63,7 @@ jobs:
           DB_PASSWORD="$(openssl rand -hex 20)Aa1!"
           echo "::add-mask::$DB_PASSWORD"
           echo "CI_SQL_PASSWORD=$DB_PASSWORD" >> "$GITHUB_ENV"
+
       - name: Start disposable SQL Server
         shell: bash
         run: |
@@ -61,16 +72,23 @@ jobs:
             -e MSSQL_SA_PASSWORD="$CI_SQL_PASSWORD" \
             -p 127.0.0.1:1433:1433 \
             mcr.microsoft.com/mssql/server:2022-latest
+
           for i in {1..60}; do
-            if docker logs careflow-db 2>&1 | grep -q 'SQL Server is now ready for client connections'; then exit 0; fi
+            if docker logs careflow-db 2>&1 | grep -q 'SQL Server is now ready for client connections'; then
+              exit 0
+            fi
+
             if ! docker ps --format '{{.Names}}' | grep -q '^careflow-db$'; then
               docker logs careflow-db
               exit 1
             fi
+
             sleep 2
           done
+
           docker logs careflow-db
           exit 1
+
       - name: Apply migration to SQL Server
         env:
           ConnectionStrings__CareFlowDb: 'Server=127.0.0.1,1433;Database=CareFlowDb;User Id=sa;Password=${{ env.CI_SQL_PASSWORD }};Encrypt=True;TrustServerCertificate=True'
@@ -78,16 +96,21 @@ jobs:
           dotnet ef database update \
             --project src/CareFlow.Infrastructure \
             --startup-project src/CareFlow.Api \
-            --context CareFlowDbContext --no-build
+            --context CareFlowDbContext
+
           dotnet ef migrations list \
             --project src/CareFlow.Infrastructure \
             --startup-project src/CareFlow.Api \
-            --context CareFlowDbContext --no-build
+            --context CareFlowDbContext
+
       - name: Commit generated migration to branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add src/CareFlow.Infrastructure/Persistence/Migrations
-          git diff --cached --quiet && exit 0
-          git commit -m "Generate EF Core InitialCreate migration [skip ci]"
-          git push origin HEAD:database-foundation
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Generate EF Core InitialCreate migration [skip ci]"
+            git push origin HEAD:database-foundation
+          fi
