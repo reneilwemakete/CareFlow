@@ -1,5 +1,5 @@
 
-name: Generate and validate SQL Server migration
+name: Validate SQL Server migrations
 
 on:
   push:
@@ -7,11 +7,12 @@ on:
       - database-foundation
     paths:
       - '.github/workflows/database-migration.yml'
-      - 'src/CareFlow.Api/CareFlow.Api.csproj'
+      - 'src/**'
+  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   migration:
@@ -34,28 +35,13 @@ jobs:
           dotnet restore CareFlow.slnx
           dotnet build CareFlow.slnx --no-restore
 
-      - name: Generate initial migration from EF model
+      - name: Validate EF Core model and generate SQL script
         env:
           ConnectionStrings__CareFlowDb: 'Server=127.0.0.1,1433;Database=CareFlowDb;User Id=sa;Password=DesignTimeOnly_123!;Encrypt=True;TrustServerCertificate=True'
         run: |
-          dotnet ef migrations add InitialCreate \
-            --project src/CareFlow.Infrastructure \
-            --startup-project src/CareFlow.Api \
-            --context CareFlowDbContext \
-            --output-dir Persistence/Migrations
-
-          dotnet ef migrations script --idempotent \
-            --project src/CareFlow.Infrastructure \
-            --startup-project src/CareFlow.Api \
-            --context CareFlowDbContext \
-            -o /tmp/careflow-migration.sql
-
+          dotnet ef migrations has-pending-model-changes --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext
+          dotnet ef migrations script --idempotent --project src/CareFlow.Infrastructure --startup-project src/CareFlow.Api --context CareFlowDbContext -o /tmp/careflow-migration.sql
           test -s /tmp/careflow-migration.sql
-
-          dotnet ef migrations has-pending-model-changes \
-            --project src/CareFlow.Infrastructure \
-            --startup-project src/CareFlow.Api \
-            --context CareFlowDbContext
 
       - name: Generate temporary CI SQL password
         shell: bash
@@ -103,14 +89,3 @@ jobs:
             --startup-project src/CareFlow.Api \
             --context CareFlowDbContext
 
-      - name: Commit generated migration to branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add src/CareFlow.Infrastructure/Persistence/Migrations
-
-          if ! git diff --cached --quiet; then
-            git commit -m "Generate EF Core InitialCreate migration [skip ci]"
-            git push origin HEAD:database-foundation
-          fi
