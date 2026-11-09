@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using CareFlow.Domain.Entities;
+using CareFlow.Domain.Enums;
 using CareFlow.Infrastructure.Identity;
 using CareFlow.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
